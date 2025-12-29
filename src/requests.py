@@ -114,3 +114,29 @@ class Requests:
             return self.__provider.serializer(session.get_response(message))
         except Exception as error:
             return error.message
+
+class CBRF(Providers):
+    def mount_url(self):
+        # daily_json.js содержит курсы всех валют в рублях
+        return 'https://www.cbr-xml-daily.ru/daily_json.js'
+
+    def serializer(self, data: bytes) -> Dict[str, Union[str, int]]:
+        return self.default_response(json.loads(data))
+
+    def default_response(self, data: Dict[str, Any]):
+        # стоимость 1 единицы целевой валюты в рублях
+        to_rate_rub = data['Valute'][self.to_currency]['Value'] / data['Valute'][self.to_currency]['Nominal']
+        # стоимость 1 единицы исходной валюты в рублях
+        from_rate_rub = data['Valute'][self.from_currency]['Value'] / data['Valute'][self.from_currency]['Nominal']
+        # вычисляем курс: сколько целевой валюты за 1 исходную валюту
+        rate = from_rate_rub / to_rate_rub
+        self.response.update({
+            'base': rate,
+            'from': self.from_currency,
+            'to': self.to_currency,
+            'amount': 0,
+            'info': self.create_info(data['Date'].split('T')[0]),
+            'disclaimer': self.mount_url(),
+            'provider': 1,  # ID нового провайдера
+        })
+        return self.response
